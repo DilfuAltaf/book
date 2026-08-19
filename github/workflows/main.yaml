@@ -1,51 +1,56 @@
-name: Deploy Next.js
+name: Deploy NestJS
+
 
 on:
   push:
     branches:
       - main
 
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
+
     steps:
-      # 1. Checkout kode repository
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 2. Setup Node.js
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '20'
           cache: 'npm'
 
-      # 3. Install dependencies & Build
-      - name: Install & Build
+
+      # Build aplikasi
+      - name: Install All & Build NestJS
         run: |
           npm ci
           npm run build
 
-      # 4. Siapkan struktur folder standalone untuk di-deploy
-      - name: Prepare Standalone Build
-        run: |
-          cp -r .next/static .next/standalone/.next/
-          cp -r public .next/standalone/
 
-      # 5. Upload folder standalone ke Server via SFTP/SCP
+      # Hapus devDependencies & install ulang hanya production modules
+      - name: Prune Dev Dependencies
+        run: |
+          rm -rf node_modules
+          npm ci --omit=dev
+
+
+      # Kirim dist, node_modules, dan package.json ke Server
       - name: Deploy to Hosting via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           password: ${{ secrets.SSH_PASSWORD }}
-          source: ".next/standalone/*"
+          source: "dist,node_modules,package.json,app.js"
           target: "${{ secrets.TARGET_DIR }}"
-          strip_components: 2
 
-      # 6. Restart Aplikasi via Phusion Passenger (Restart File Manager DirectAdmin)
-      - name: Restart Application Process
+
+      # Cukup restart Passenger tanpa perlu jalankan npm ci di server
+      - name: Restart Application
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
